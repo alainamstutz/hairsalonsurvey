@@ -1,4 +1,4 @@
-# hair SALON survey
+# Hair SALON survey
 www.hairsalonproject.com
 
 https://clinepi.dkf.unibas.ch/en/salon/#c2107 
