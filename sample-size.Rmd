@@ -57,5 +57,8 @@ print(ss_plot)
 # Save the ggplot as an image file (e.g., PNG)
 ggsave("sample_size_plot.png", plot = ss_plot, width = 6, height = 4, units = "in")
 
+# Print the current version of R
+cat("R version:", R.version$version.string, "\n")
+
 ```
 
