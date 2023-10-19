@@ -34,8 +34,8 @@ confidence_level <- 0.95 # confidence level
 z <- qnorm(1 - (1 - confidence_level) / 2) # z statistic
 d <- 0.05 # margin of error
 cluster_size <- 3 # Average cluster size (fixed in our case)
-icc <- 0.05 # Intracluster correlation coefficient -> Clients from the same hair stylist might be correlated in terms of outcome (acceptability), so, 0.05 is the lowest acceptable, probably even a bit higher
-prop <- 0.77 # Estimated proportion (= 70% acceptability) -> rather low! The higher, the lower the sample size needed.
+icc <- 0.05 # Intracluster correlation coefficient -> Clients from the same hair stylist might be correlated in terms of outcome (acceptability), so, 0.05 is the lowest acceptable.
+prop <- 0.77 # Estimated proportion (= 77% acceptability) -> rather low! The higher, the lower the sample size needed.
 deff <- 1 + (cluster_size - 1) * icc # Design Effect
 sample_size <- ceiling((z^2 * prop * (1 - prop) * deff) / d^2)
 # Print the calculated sample size
