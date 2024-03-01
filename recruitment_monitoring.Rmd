@@ -28,9 +28,7 @@ library(scales) # date_function
 ### Load Data
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 df_sr <- read_xlsx("/Users/amstutzal/Library/CloudStorage/OneDrive-usb.ch/Dokumente - SALON/General/15_data/sr.xlsx")
-df_sr <- df_sr %>% filter(firstname_s != "#fname")
 df_ss <- read_xlsx("/Users/amstutzal/Library/CloudStorage/OneDrive-usb.ch/Dokumente - SALON/General/15_data/ss.xlsx")
-df_ss <- df_ss %>% filter(firstname_s != "#fname")
 df_cr <- read_xlsx("/Users/amstutzal/Library/CloudStorage/OneDrive-usb.ch/Dokumente - SALON/General/15_data/cr.xlsx")
 df_cs <- read_xlsx("/Users/amstutzal/Library/CloudStorage/OneDrive-usb.ch/Dokumente - SALON/General/15_data/cs.xlsx")
 ```
@@ -95,18 +93,20 @@ df_cs$source <- "survey"
 ```
 
 ### Data cleaning
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 # stylist registration
-
+df_sr <- df_sr %>% filter(firstname_s != "#fname")
+# df_ss <- df_ss %>% filter(`_id` != )
 
 # stylist survey
-
+df_ss <- df_ss %>% filter(firstname_s != "#fname")
+# df_ss <- df_ss %>% filter(`_id` != )
 
 # client registration
-
+# df_cr <- df_cr %>% filter(`_id` != )
 
 # client survey
-
+# df_cs <- df_cs %>% filter(`_id` != )
 
 ```
 
