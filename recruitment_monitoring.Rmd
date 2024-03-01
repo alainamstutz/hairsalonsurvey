@@ -13,9 +13,7 @@ output:
 # runtime: shiny
 # css: style.css
 ---
-##############################################################################################
 # PREPARATION
-##############################################################################################
 ### Load packages
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -112,18 +110,14 @@ df_cs$source <- "survey"
 
 ```
 
-##############################################################################################
 # HAIR SALON GPS
-##############################################################################################
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 leaflet(data = df_sr) %>%
   addTiles() %>%
   addMarkers(~`_salon_gps_s_longitude`, ~`_salon_gps_s_latitude`, popup = ~fullname_s)
 ```
 
-##############################################################################################
 # RECRUITMENT STYLISTS
-##############################################################################################
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 ## Plot 2: without names and including recruitment trajectory
 # Extract Dates
@@ -143,13 +137,9 @@ ggplot(recruitment_df_total, aes(x = Date, y = Count)) +
        y = "Total Number of Stylists") +
   theme_minimal() +
   scale_x_date(labels = date_format("%Y-%m-%d"), date_breaks = "1 month")
-
-help(date_format)
 ```
 
-##############################################################################################
 # RECRUITMENT CLIENTS
-##############################################################################################
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 ## Plot 2: without names and including recruitment trajectory
 # Extract Dates
