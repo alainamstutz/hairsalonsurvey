@@ -1,0 +1,630 @@
+---
+title: "Hair SALON project monitoring"
+author: "A.Amstutz"
+date: "25.02.2024"
+output:
+  html_document:
+    keep_md: yes
+    toc: TRUE
+    toc_float: TRUE
+    code_folding: hide
+  pdf_document:
+    toc: yes
+runtime: shiny
+css: style.css
+---
+##############################################################################################
+# PREPARATION
+##############################################################################################
+### Load packages
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+library(readxl)
+library(ggplot2)
+library(DT) # shiny app style table
+library(formattable) # shiny app style table
+library(leaflet) # gps map
+library(shiny)
+library(remotes)
+# remotes::install_gitlab("dickoa/robotoolbox")
+library(robotoolbox)
+library(tidyr)
+library(dplyr)
+packageVersion("robotoolbox")
+```
+
+### Load data directly via accessing the REST API of KoboToolbox
+```{r message=FALSE, warning=FALSE, include=FALSE}
+kobo_setup(url = "https://kf.kobotoolbox.org/", token = "8cf1369836ba55097f5489f92bb49effa405d0ac") # get token under "Account settings"
+kobo_library <- kobo_asset_list() 
+
+# kobo_attachment_download
+
+# Stylist Registration
+stylist_reg <- "a7SRHqqYqkMWe3bU4odtbt" # uid of Stylist Registration
+
+
+uid_stylist_reg <- kobo_library$uid[kobo_library$uid == stylist_reg][1]
+asset_stylist_reg <- kobo_asset(uid_stylist_reg)
+asset_stylist_reg
+df_sr <- kobo_data(asset_stylist_reg)
+# 
+# df_sr <- df_sr %>% rename(submission_time_s = `_submission_time`,
+#                           id = `_id`)
+# attachments_list_sr <- df_sr[["_attachments"]] # Extract the _attachments column that contains the pictures
+# flattened_list_sr <- purrr::map_df(attachments_list_sr, ~setNames(.x, paste0(names(.x), seq_along(.x)))) # Flatten the list of data frames with prefixed column names
+# url_data_sr <- flattened_list_sr %>%
+#   select(instance7, download_small_url4) %>%
+#   rename(id = instance7,
+#          salon_pics = download_small_url4)
+# url_data_sr_summarized <- url_data_sr %>% # Group by person and summarize to get two columns of unique url
+#   group_by(id) %>%
+#   summarize(salon_pic_inside_s_URL = first(salon_pics),
+#             salon_pic_outside_s_URL = last(salon_pics))
+# df_sr <- left_join(df_sr, url_data_sr_summarized, by = join_by(id == id)) # Merge back
+# df_sr$salon_pic_inside_s_URL <- sapply(df_sr$salon_pic_inside_s_URL, link_activator) # Activate URL
+# df_sr$salon_pic_outside_s_URL <- sapply(df_sr$salon_pic_outside_s_URL, link_activator) # Activate URL
+
+
+
+
+
+# Stylist Survey
+stylist_survey <- "aJgEWjq4ZvvLqv7ywJcTre" # uid of Stylist Survey
+uid_stylist_survey <- kobo_library$uid[kobo_library$uid == stylist_survey][1]
+asset_stylist_survey <- kobo_asset(uid_stylist_survey)
+asset_stylist_survey
+df_ss <- kobo_data(asset_stylist_survey)
+
+# Client Registration
+client_reg <- "aD8nNUjUyqZeWj8QZxfSBv" # uid of Client Registration
+uid_client_reg <- kobo_library$uid[kobo_library$uid == client_reg][1]
+asset_client_reg <- kobo_asset(uid_client_reg)
+asset_client_reg
+df_cr <- kobo_data(asset_client_reg)
+
+# Client Survey
+client_survey <- "aKgeYcFfsVACjMpNJvxXEF" # uid of Client Survey
+uid_client_survey <- kobo_library$uid[kobo_library$uid == client_survey][1]
+asset_client_survey <- kobo_asset(uid_client_survey)
+asset_client_survey
+df_cs <- kobo_data(asset_client_survey)
+```
+
+### Functions, order and prepare dataframes
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+# Create a function to activate the URL links
+link_activator <- function(x) {
+  sprintf('<a href="%s" target="_blank">%s</a>', x, x)
+}
+# Create a function to mark the duplicates in red, bold
+dupl_checker <- formatter("span",
+                          style = function(x) style(
+                            color = ifelse(duplicated(x) == TRUE, "white", "black"),
+                            background.color = ifelse(duplicated(x) == TRUE, "red", "white"),
+                            font.weight = ifelse(duplicated(x) == TRUE, "bold", "normal")
+                          ))
+# Create a function to mark a duplicate in red, bold - WITHIN fullname
+dupl_checker_within_fullname <- function(fullname_col, source_col) {
+  formatter("span",
+            style = function(x) style(
+              color = ifelse(duplicated(paste(fullname_col, x)) & x %in% unique(x), "white", "black"),
+              background.color = ifelse(duplicated(paste(fullname_col, x)) & x %in% unique(x), "red", "white"),
+              font.weight = ifelse(duplicated(paste(fullname_col, x)) & x %in% unique(x), "bold", "normal")
+            ))
+}
+# Create a function to mark the duplicates in green, bold
+dupl_checker_masterlist <- formatter("span",
+                          style = function(x) style(
+                            color = ifelse(duplicated(x) == TRUE, "white", "black"),
+                            background.color = ifelse(duplicated(x) == TRUE, "green", "white"),
+                            font.weight = ifelse(duplicated(x) == TRUE, "bold", "normal")
+                          ))
+# Create a function to mark the missing in red, bold
+missing_checker <- formatter("span",
+                          style = function(x) style(
+                            color = ifelse(is.na(x) == TRUE, "white", "black"),
+                            background.color = ifelse(is.na(x) == TRUE, "red", "white"),
+                            font.weight = ifelse(is.na(x) == TRUE, "bold", "normal")
+                          ))
+# Create a function to mark the ages outside 15-35 in orange, bold
+age_checker <- formatter("span",
+                         style = function(x) style(
+                           color = ifelse(is.na(x) | x < 15 | x > 35, "white", "black"),
+                           background.color = ifelse(is.na(x) | x < 15 | x > 35, "orange", "white"),
+                           font.weight = ifelse(is.na(x) | x < 15 | x > 35, "bold", "normal")
+                           ))
+# Create a function to marks the gender men in orange, bold
+gender_checker <- formatter("span",
+                            style = function(x) style(
+                              color = ifelse(grepl("_man", x, ignore.case = TRUE), "white", "black"),
+                              background.color = ifelse(grepl("_man", x, ignore.case = TRUE), "orange", "white"),
+                              font.weight = ifelse(grepl("_man", x, ignore.case = TRUE), "bold", "normal")
+                            ))
+
+### reformat all 4 questionnaires
+# stylist registration
+df_sr <- df_sr %>% mutate(fullname_s = paste(firstname_s, lastname_s, sep = " ")) # create fullname
+df_sr <- df_sr %>% rename(submission_time_s = `_submission_time`,
+                          id = `_id`)
+df_sr <- df_sr[order(df_sr$submission_time_s, decreasing = TRUE), ] # sort by latest submission date/time on top
+df_sr$source <- "registration"
+attachments_list_sr <- df_sr[["_attachments"]] # Extract the _attachments column that contains the salon pictures
+flattened_list_sr <- purrr::map_df(attachments_list_sr, ~setNames(.x, paste0(names(.x), seq_along(.x)))) # Flatten the list of data frames with prefixed column names
+url_data_sr <- flattened_list_sr %>%
+  select(instance7, download_small_url4) %>%
+  rename(id = instance7,
+         salon_pics = download_small_url4)
+url_data_sr_summarized <- url_data_sr %>% # Group by person and summarize to get two columns of unique url
+  group_by(id) %>%
+  summarize(salon_pic_inside_s_URL = first(salon_pics),
+            salon_pic_outside_s_URL = last(salon_pics))
+df_sr <- left_join(df_sr, url_data_sr_summarized, by = join_by(id == id)) # Merge back
+df_sr$salon_pic_inside_s_URL <- sapply(df_sr$salon_pic_inside_s_URL, link_activator) # Activate URL
+df_sr$salon_pic_outside_s_URL <- sapply(df_sr$salon_pic_outside_s_URL, link_activator) # Activate URL
+
+
+
+
+
+# # stylist registration
+# df_sr <- df_sr %>% mutate(fullname_s = paste(firstname_s, lastname_s, sep = " ")) # create fullname
+# df_sr <- df_sr %>% rename(submission_time_s = `_submission_time`,
+#                           id = `_id`)
+# df_sr$source <- "registration"
+# attachments_list_sr <- df_sr[["_attachments"]] # Extract the _attachments column that contains the salon pictures
+# 
+# # Flatten the list of data frames with prefixed column names
+# flattened_list <- purrr::map_df(attachments_list, ~setNames(.x, paste0(names(.x), seq_along(.x))))
+# 
+# # Extract relevant columns
+# result_df <- flattened_list %>%
+#   filter(!is.null(download_small_url)) %>%
+#   select(download_small_url, instance)
+# 
+# # Print the resulting data frame
+# print(result_df)
+# 
+# 
+# flattened_list_sr <- as.data.frame(do.call(cbind, lapply(attachments_list_sr, function(x) setNames(as.data.frame(x), paste0(names(x), seq_along(x)))))) # Flatten the list without purrr and make column names unique
+# flattened_list_sr <- setNames(flattened_list_sr, make.unique(names(flattened_list_sr))) # Again, rename to unique columns
+# filtered_data <- flattened_list_sr %>% # Extracting only columns with download_small_url4.x and instance7.x
+#   select(contains("instance"),
+#          contains("download_small_url"))
+# # Reshaping the data so that we have rows with unique "instance" and 2 columns with each download_small_url (outside pic and inside pic)
+# 
+# reshaped_data <- filtered_data %>%
+#   mutate(row_id = row_number()) %>%
+#   gather(key, value, -row_id)
+# print(reshaped_data)
+# 
+# reshaped_data <- filtered_data %>%
+#   mutate(row_id = row_number()) %>%
+#   tidyr::gather(key, value, matches("instance|download_small_url4"), -row_id)
+# 
+# reshaped_data <- reshaped_data %>%
+#   separate(key, into = c("variable", "index"), sep = "\\.")
+# print(reshaped_data)
+# 
+# reshaped_data <- reshaped_data %>%
+#   spread(variable, value)
+# 
+# reshaped_data <- filtered_data %>%
+#   dplyr::mutate(row_id = row_number()) %>%
+#   tidyr::gather(key, value, -row_id) %>%
+#   tidyr::separate(key, into = c("variable", "index"), sep = "\\.") %>%
+#   tidyr::spread(variable, value)
+# reshaped_data_renamed <- reshaped_data %>% 
+#   dplyr::select(instance7, download_small_url4) %>% 
+#   dplyr::rename(instance = instance7,
+#          download_small_url = download_small_url4)
+# final_data <- reshaped_data_renamed %>%
+#   dplyr::group_by(instance) %>%
+#   dplyr::mutate(row_id = row_number()) %>%
+#   tidyr::pivot_wider(names_from = row_id, values_from = download_small_url) %>%
+#   dplyr::rename(
+#     salon_pic_outside_s_URL = `1`,
+#     salon_pic_inside_s_URL = `2`,
+#     id = instance
+#   ) %>%
+#   dplyr::ungroup() %>%
+#   dplyr::distinct(id, .keep_all = TRUE)
+# final_data$id <- as.numeric(final_data$id)
+# df_sr <- left_join(df_sr, final_data, by = join_by(id == id)) # Merge back
+# df_sr$salon_pic_inside_s_URL <- sapply(df_sr$salon_pic_inside_s_URL, link_activator) # Activate URL
+# df_sr$salon_pic_outside_s_URL <- sapply(df_sr$salon_pic_outside_s_URL, link_activator) # Activate URL
+# df_sr <- df_sr[order(df_sr$submission_time_s, decreasing = TRUE), ] # sort by latest submission date/time on top
+
+
+# stylist survey
+df_ss <- df_ss %>% mutate(fullname_s = paste(firstname_s, lastname_s, sep = " ")) # create fullname
+df_ss <- df_ss %>% rename(submission_time_s = `_submission_time`,
+                          id = `_id`)
+df_ss$source <- "survey"
+attachments_list_ss <- df_ss[["_attachments"]] # Extract the _attachments column that contains the pictures
+flattened_list_ss <- as.data.frame(do.call(cbind, lapply(attachments_list_ss, function(x) setNames(as.data.frame(x), paste0(names(x), seq_along(x)))))) # Flatten the list without purrr and make column names unique
+flattened_list_ss <- setNames(flattened_list_ss, make.unique(names(flattened_list_ss))) # Again, rename to unique columns
+filtered_data <- flattened_list_ss %>% # Extracting only columns with download_small_url4.x and instance7.x
+  select(contains("instance"),
+         contains("download_small_url"))
+# Reshaping the data so that we have rows with unique "instance" and 2 columns with each download_small_url (outside pic and inside pic)
+reshaped_data <- filtered_data %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::gather(key, value, -row_id) %>%
+  tidyr::separate(key, into = c("variable", "index"), sep = "\\.") %>%
+  tidyr::spread(variable, value)
+reshaped_data_renamed <- reshaped_data %>% 
+  dplyr::select(instance7, download_small_url4) %>% 
+  dplyr::rename(instance = instance7,
+         download_small_url = download_small_url4)
+final_data <- reshaped_data_renamed %>%
+  dplyr::group_by(instance) %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::pivot_wider(names_from = row_id, values_from = download_small_url) %>%
+  dplyr::rename(
+    sign_s_URL = `1`,
+    id = instance
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::distinct(id, .keep_all = TRUE)
+final_data$id <- as.numeric(final_data$id)
+df_ss <- left_join(df_ss, final_data, by = join_by(id == id)) # Merge back
+df_ss$sign_s_URL <- sapply(df_ss$sign_s_URL, link_activator) # Activate URL
+df_ss <- df_ss[order(df_ss$submission_time_s, decreasing = TRUE), ] # sort by latest submission date/time on top
+
+
+# client registration
+df_cr <- df_cr %>% mutate(fullname_c = paste(firstname_c, lastname_c, sep = " ")) # create fullname
+df_cr <- df_cr %>% mutate(fullname_s = paste(stylist_firstname_c, stylist_lastname_c, sep = " ")) # create fullname of the clients' stylist
+df_cr <- df_cr %>% rename(submission_time_c = `_submission_time`,
+                          id = `_id`)
+df_cr$source <- "registration"
+attachments_list_cr <- df_cr[["_attachments"]] # Extract the _attachments column that contains the pictures
+flattened_list_cr <- as.data.frame(do.call(cbind, lapply(attachments_list_cr, function(x) setNames(as.data.frame(x), paste0(names(x), seq_along(x)))))) # Flatten the list without purrr and make column names unique
+flattened_list_cr <- setNames(flattened_list_cr, make.unique(names(flattened_list_cr))) # Again, rename to unique columns
+filtered_data <- flattened_list_cr %>% # Extracting only columns with download_small_url4.x and instance7.x
+  select(contains("instance"),
+         contains("download_small_url"))
+# Reshaping the data so that we have rows with unique "instance" and 2 columns with each download_small_url (outside pic and inside pic)
+reshaped_data <- filtered_data %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::gather(key, value, -row_id) %>%
+  tidyr::separate(key, into = c("variable", "index"), sep = "\\.") %>%
+  tidyr::spread(variable, value)
+reshaped_data_renamed <- reshaped_data %>% 
+  dplyr::select(instance7, download_small_url4) %>% 
+  dplyr::rename(instance = instance7,
+         download_small_url = download_small_url4)
+final_data <- reshaped_data_renamed %>%
+  dplyr::group_by(instance) %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::pivot_wider(names_from = row_id, values_from = download_small_url) %>%
+  dplyr::rename(
+    hair_pic_c_URL = `1`,
+    id = instance
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::distinct(id, .keep_all = TRUE)
+final_data$id <- as.numeric(final_data$id)
+df_cr <- left_join(df_cr, final_data, by = join_by(id == id)) # Merge back
+df_cr$hair_pic_c_URL <- sapply(df_cr$hair_pic_c_URL, link_activator) # Activate URL
+df_cr <- df_cr[order(df_cr$submission_time_c, decreasing = TRUE), ] # sort by latest submission date/time on top
+
+
+# client survey
+df_cs <- df_cs %>% mutate(fullname_c = paste(firstname_c, lastname_c, sep = " ")) # create fullname
+df_cs <- df_cs %>% mutate(fullname_s = paste(stylist_firstname_c, stylist_lastname_c, sep = " ")) # create fullname of the clients' stylist
+df_cs <- df_cs %>% rename(submission_time_c = `_submission_time`,
+                          id = `_id`)
+df_cs$source <- "survey"
+attachments_list_cs <- df_cs[["_attachments"]] # Extract the _attachments column that contains the pictures
+flattened_list_cs <- as.data.frame(do.call(cbind, lapply(attachments_list_cs, function(x) setNames(as.data.frame(x), paste0(names(x), seq_along(x)))))) # Flatten the list without purrr and make column names unique
+flattened_list_cs <- setNames(flattened_list_cs, make.unique(names(flattened_list_cs))) # Again, rename to unique columns
+filtered_data <- flattened_list_cs %>% # Extracting only columns with download_small_url4.x and instance7.x
+  select(contains("instance"),
+         contains("download_small_url"))
+# Reshaping the data so that we have rows with unique "instance" and 2 columns with each download_small_url (outside pic and inside pic)
+reshaped_data <- filtered_data %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::gather(key, value, -row_id) %>%
+  tidyr::separate(key, into = c("variable", "index"), sep = "\\.") %>%
+  tidyr::spread(variable, value)
+reshaped_data_renamed <- reshaped_data %>% 
+  dplyr::select(instance7, download_small_url4) %>% 
+  dplyr::rename(instance = instance7,
+         download_small_url = download_small_url4)
+final_data <- reshaped_data_renamed %>%
+  dplyr::group_by(instance) %>%
+  dplyr::mutate(row_id = row_number()) %>%
+  tidyr::pivot_wider(names_from = row_id, values_from = download_small_url) %>%
+  dplyr::rename(
+    sign_c_URL = `1`,
+    id = instance
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::distinct(id, .keep_all = TRUE)
+final_data$id <- as.numeric(final_data$id)
+df_cs <- left_join(df_cs, final_data, by = join_by(id == id)) # Merge back
+df_cs$sign_c_URL <- sapply(df_cs$sign_c_URL, link_activator) # Activate URL
+df_cs <- df_cs[order(df_cs$submission_time_c, decreasing = TRUE), ] # sort by latest submission date/time on top
+```
+
+### Data cleaning
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+# stylist registration
+
+# stylist survey
+
+# client registration
+
+# client survey
+
+```
+
+##############################################################################################
+# STYLIST REGISTRATION
+##############################################################################################
+### Check GPS
+*Click on the GPS arrow to see the name*
+
+##### Document any strange GPS
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+leaflet(data = df_sr) %>%
+  addTiles() %>%
+  addMarkers(~salon_gps_s_longitude, ~salon_gps_s_latitude, popup = ~fullname_s)
+```
+
+### Check Duplicates, Pictures, and M-Pesa
+*Duplicates are marked in bold red, based on fullname, mpesa number and whatsapp number*
+
+##### Document any duplicate, strange picture and not matching M-Pesa
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_sr_check <- df_sr %>% 
+    select(fullname_s, age_s, gender_s, whatsapp_s, mpesa_name_s, mpesa_s, salon_district_s, salon_name_desc_s, salon_address_s, salon_pic_outside_s_URL, salon_pic_inside_s_URL, submission_time_s)
+
+# Create the table
+as.datatable(formattable(df_sr_check, list(fullname_s = dupl_checker,
+                                          mpesa_s = dupl_checker,
+                                          whatsapp_s = dupl_checker)),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+###########
+#### **Now, send to all Stylists (who do not have strange info) the Stylist consent form and the Stylist survey link**
+###########
+
+##############################################################################################
+# STYLIST SURVEY
+##############################################################################################
+### Check Duplicates and Signature
+*Duplicates are marked in bold red, based on fullname and whatsapp number*
+
+##### Document any duplicate and missing signature
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_ss_check <- df_ss %>% 
+    select(fullname_s, age_s, gender_s, whatsapp_s, salon_district_s, sign_s_URL, submission_time_s)
+
+# Create the table
+as.datatable(formattable(df_ss_check, list(fullname_s = dupl_checker,
+                                          whatsapp_s = dupl_checker)),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+### Link Stylist Survey to Stylist Registration
+*Each Stylist should have her/his name in duplicate (bold green), once from the registration form and once from the survey*
+
+*If a Stylist has an entry multiple times from the same source (registration/survey), then this is a duplicate (red bold)*
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_ss_linkage <- df_ss %>% 
+    select(source, fullname_s, age_s, gender_s, whatsapp_s, salon_district_s, submission_time_s)
+df_sr_linkage <- df_sr %>% 
+    select(source, fullname_s, age_s, gender_s, whatsapp_s, salon_district_s, submission_time_s)
+
+df_sr_ss <- rbind(df_ss_linkage, df_sr_linkage)
+df_sr_ss <- df_sr_ss[order(df_sr_ss$fullname_s, df_sr_ss$submission_time_s), ]
+
+df_sr_ss <- df_sr_ss %>% 
+    select(source, fullname_s, age_s, gender_s, whatsapp_s, salon_district_s, submission_time_s)
+
+# Create the table
+as.datatable(formattable(df_sr_ss, list(fullname_s = dupl_checker_masterlist,
+                                        whatsapp_s = dupl_checker_masterlist,
+                                        dupl_checker_within_fullname(df_sr_ss$fullname_s, df_sr_ss$source)
+                                        )),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+###########
+#### **Now, send to Stylists who also have a Stylist Survey: a) the PrEP flyer and b) the message about recruiting Clients including the Client Registration homepage link (see googledoc)**
+###########
+
+##### Document this
+
+##############################################################################################
+# CLIENT REGISTRATION
+##############################################################################################
+### Check GPS
+*Click on the GPS arrow to see the name*
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+leaflet(data = df_cr) %>%
+  addTiles() %>%
+  addMarkers(~salon_gps_c_longitude, ~salon_gps_c_latitude, popup = ~fullname_c)
+```
+
+### Check Duplicates, Pictures, M-Pesa, Age and Gender
+*Duplicates are marked in bold red, based on fullname, mpesa number and whatsapp number*
+
+*Any male gender & any age outside 15-35 years are marked in bold orange*
+
+##### Document any duplicate, strange picture, not matching M-Pesa - and if any male client or client outside the eligible age range registered
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_cr_check <- df_cr %>% 
+    select(fullname_c, age_c, gender_c, whatsapp_c, mpesa_name_c, mpesa_c, salon_district_c, salon_name_desc_c, salon_address_c, fullname_s, hair_pic_c_URL, submission_time_c)
+
+# Create the table
+as.datatable(formattable(df_cr_check, list(fullname_c = dupl_checker,
+                                          mpesa_c = dupl_checker,
+                                          whatsapp_c = dupl_checker,
+                                          age_c = age_checker,
+                                          gender_c = gender_checker)),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+###########
+#### **Now, send to all Clients (who do not have strange info) the Client consent form and the Client survey link**
+###########
+
+##############################################################################################
+# CLIENT SURVEY
+##############################################################################################
+### Check Duplicates and Signature picture
+*Duplicates are marked in bold red, based on fullname and whatsapp number*
+
+##### Document any duplicate and missing signature
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_cs_check <- df_cs %>% 
+    select(fullname_c, age_c, gender_c, whatsapp_c, salon_district_c, sign_c_URL, submission_time_c)
+
+# Create the table
+as.datatable(formattable(df_cs_check, list(fullname_c = dupl_checker,
+                                          whatsapp_c = dupl_checker)),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+### Link Client Survey to Client Registration
+*Each Client should have her name in duplicate (bold green), once from the registration form and once from the survey*
+
+*If a Client has an entry multiple times from the same source (registration/survey), then this is a duplicate (bold red)*
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_cs_linkage <- df_cs %>% 
+    select(source, fullname_c, age_c, gender_c, whatsapp_c, salon_district_c, fullname_s, submission_time_c)
+df_cr_linkage <- df_cr %>% 
+    select(source, fullname_c, age_c, gender_c, whatsapp_c, salon_district_c, fullname_s, submission_time_c)
+
+df_cr_cs <- rbind(df_cs_linkage, df_cr_linkage)
+df_cr_cs <- df_cr_cs[order(df_cr_cs$fullname_c, df_cr_cs$submission_time_c), ]
+
+df_cr_cs <- df_cr_cs %>% 
+    select(source, fullname_c, age_c, gender_c, whatsapp_c, salon_district_c, fullname_s, submission_time_c)
+
+# Create the table
+as.datatable(formattable(df_cr_cs, list(fullname_c = dupl_checker_masterlist,
+                                        whatsapp_c = dupl_checker_masterlist,
+                                        source = dupl_checker_within_fullname(df_cr_cs$fullname_c, df_cr_cs$source)
+                                        )),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F,
+             )
+```
+
+###########
+#### **Now, send to all Clients (who have a registration + survey) the PrEP flyer and the Thank you message**
+###########
+
+##### Document this
+
+##############################################################################################
+# LINK CLIENT Registration TO STYLIST Registration
+##############################################################################################
+*Stylist info is at the beginning, Client info is marked in lightblue.*
+
+*Each Stylist should have maximum 3 clients (=> maximum twice marked in bold green).*
+
+*Check column fullname_c: If there is NA (red bold) it means that no client could be linked to this stylist*
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+df_sr_link <- df_sr_check %>% 
+    select(fullname_s, age_s, gender_s, whatsapp_s, mpesa_name_s, mpesa_s, salon_district_s, salon_name_desc_s, salon_address_s, submission_time_s)
+df_cr_link <- df_cr_check %>% 
+    select(fullname_c, age_c, gender_c, whatsapp_c, mpesa_name_c, mpesa_c, salon_district_c, salon_name_desc_c, salon_address_c, fullname_s, submission_time_c)
+
+df_sr_cr <- left_join(df_sr_link, df_cr_link, by = join_by(fullname_s == fullname_s))
+df_sr_cr <- df_sr_cr[order(df_sr_cr$fullname_s, df_sr_cr$submission_time_s), ]
+
+# Create the table
+columns_c <- c("fullname_c", "age_c", "gender_c", "whatsapp_c", "mpesa_name_c", "mpesa_c", "salon_district_c", "salon_name_desc_c", "salon_address_c", "submission_time_c")
+as.datatable(formattable(df_sr_cr, list(fullname_s = dupl_checker_masterlist,
+                                        fullname_c = missing_checker)),
+             rownames = FALSE,
+             filter = "top",
+             class = 'cell-border stripe',
+             editable = F) %>%
+  formatStyle(columns_c, backgroundColor = 'lightblue')
+```
+
+###########
+#### **Now, reimburse: STYLIST (100 LSL per client) & CLIENT (50 LSL each). And send the Citizen Science certificate to the Stylist**
+###########
+
+##### Document this
+
+# Recruitment plot STYLISTS
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+## Plot 1: stacked including names
+# Extract Dates
+df_sr_cr$submission_date_only_s <- as.Date(df_sr_cr$submission_time_s)
+# Count the number of Stylist registrations of each name on each date
+recruitment_counts_s <- table(df_sr_cr$fullname_s, df_sr_cr$submission_date_only_s)
+recruitment_df_s <- as.data.frame(recruitment_counts_s)
+colnames(recruitment_df_s) <- c("Name", "Date", "Count")
+recruitment_df_s <- recruitment_df_s %>% filter(Count != 0)
+recruitment_df_s$Date <- as.Date(recruitment_df_s$Date) # Convert Date column to Date type
+recruitment_df_s$Name <- factor(recruitment_df_s$Name, levels = unique(recruitment_df_s$Name)) # Create a factor variable for Name based on submission date
+# Plotting
+ggplot(recruitment_df_s, aes(x = Date, y = Count, fill = Name)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Recruitment Plot",
+       x = "Date",
+       y = "Number of Stylists",
+       fill = "Name") +
+  scale_fill_manual(values = viridis::viridis(length(unique(recruitment_df_s$Name)))) +
+  theme_minimal()
+```
+
+# Recruitment plot CLIENTS
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+# Extract Dates
+df_sr_cr$submission_date_only_c <- as.Date(df_sr_cr$submission_time_c)
+
+# CLIENT plot: Count the number of Client registrations of each name on each date
+recruitment_counts_c <- table(df_sr_cr$fullname_c, df_sr_cr$submission_date_only_c)
+recruitment_df_c <- as.data.frame(recruitment_counts_c)
+colnames(recruitment_df_c) <- c("Name", "Date", "Count")
+recruitment_df_c <- recruitment_df_c %>% filter(Count != 0)
+recruitment_df_c$Date <- as.Date(recruitment_df_c$Date) # Convert Date column to Date type
+recruitment_df_c$Name <- factor(recruitment_df_c$Name, levels = unique(recruitment_df_c$Name)) # Create a factor variable for Name based on submission date
+# Plotting
+ggplot(recruitment_df_c, aes(x = Date, y = Count, fill = Name)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Recruitment Plot",
+       x = "Date",
+       y = "Number of Clients",
+       fill = "Name") +
+  scale_fill_manual(values = viridis::viridis(length(unique(recruitment_df_c$Name)))) +
+  theme_minimal()
+```
+
+
+
+
