@@ -20,8 +20,7 @@ library(ggplot2)
 
 # Sample Size calculation, according to "Calculation of sample size for a single cross-sectional cluster survey"
 1) target population: All young women (= potential clients) in Lesotho.
-2) estimated proportion of the outcome: We hypothesize that at least 77% of participants are comfortable with being offered one of the HIV/SRH services based on Bassett et al, J Acquir Immune Defic Syndr 2018, whereby 77% of clients were comfortable receiving PrEP at a hair salon.
-any SRH service at the hair salon. Remember, in , it was over 90%.
+2) estimated proportion of the outcome: We hypothesize that at least 77% of participants are comfortable receiving at least PrEP at the hair salon, based on Bassett et al, J Acquir Immune Defic Syndr 2018, whereby 77% of clients were comfortable receiving PrEP at their hair salon.
 3) 95% confidence interval: The probability that our sample results will be within the margin of error of the true population estimate. I.e, if we were to repeat our survey 100 times, we would get the same mean result about 95 times.
 4) margin of error (precision): The maximum acceptable difference between our sample estimate and the true population parameter, i.e., how sure we need to be that the results are accurate for the entire population. Usually at around 5% or less. If we discover that 85% of our participating clients find the offer of any SRH service acceptable, we can safely assume that 80-90% of our clients will accept it.
 5) intracluster correlation coefficient (ICC): The ICC measures the similarity or correlation between responses within the same cluster. Between 0-1. A higher ICC (closer to 1) implies more similarity (i.e. more correlation). Based on the ICC, the design effect, or inflation factor, is calculated. We assume an ICC of 0.05, probably lowest possible ICC for a behavioural outcome.
